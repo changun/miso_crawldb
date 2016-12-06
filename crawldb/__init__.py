@@ -12,14 +12,18 @@ class CrawlStatus(Enum):
     CRAWLED = 1
     REQUESTED = 0
 
+
 class CommitBeforeParkingException(Exception):
     pass
+
 
 class ConcurrentParkingException(Exception):
     pass
 
+
 class MissingDataPart(Exception):
     pass
+
 
 class CrawlDB:
     def __init__(self, crawler_name, request_timeout):

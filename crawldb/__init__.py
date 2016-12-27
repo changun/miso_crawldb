@@ -236,13 +236,15 @@ class CrawlDB:
         # covert item["data"] from Binary to bytes
 
         data_buf = item["data"].value
+        # process data with multiple parts
         if "part_id" in item:
+            # get all the rest parts
             for part in range(1, int(item["total_parts"])):
                 res = self.crawl_data_db.get_item(
                     Key={"crawler_name_and_request_id": item["crawler_name_and_request_id"] + "|ext",
                          "data_id": item["data_id"] + "|" + str(part)})
                 if "Item" in res:
-                    data_buf += res["Item"]["data"].value
+                    data_buf.extend(res["Item"]["data"].value)
                 else:
                     raise MissingDataPart(item["crawler_name_and_request_id"] + "," + item["data_id"])
 
@@ -281,7 +283,9 @@ class CrawlDB:
             )
 
         for i in res["Items"]:
-            yield self.preprocess_item(i)
+            if not i["crawler_name_and_request_id"].endswith("|ext"):
+                yield self.preprocess_item(i)
+
         backoff_time = 1
         while 'LastEvaluatedKey' in res:
             try:
@@ -294,10 +298,8 @@ class CrawlDB:
                     TotalSegments=total_segments
                 )
                 for i in res["Items"]:
-                    try:
+                    if not i["crawler_name_and_request_id"].endswith("|ext"):
                         yield self.preprocess_item(i)
-                    except MissingDataPart:
-                        pass
             except ClientError as e:
                 if e.response['Error']['Code'] == "ProvisionedThroughputExceededException" and backoff_time <= 1024:
                     import time
@@ -307,6 +309,43 @@ class CrawlDB:
                     continue
                 else:
                     raise e
+
+    def parallel_scan_items(self, thread_count):
+        import threading
+        from queue import Queue
+
+        def worker(thread_id, thread_count, queue, int_event):
+            for item in self.scan_items(segment=thread_id, total_segments=thread_count):
+                queue.put(item)
+                if int_event.is_set():
+                    logging.log(logging.WARN, "Thread %d Interrupted" % thread_id)
+                    break
+            queue.put(None)
+
+        queue = Queue()
+        interruptevent = threading.Event()
+        threads = []
+        try:
+            for i in range(thread_count):
+                t = threading.Thread(target=worker, args=(i, thread_count, queue, interruptevent))
+                t.daemon = True
+                t.start()
+                threads.append(t)
+            finish_count = 0
+            while True:
+                item = queue.get()
+                if item is None:
+                    finish_count += 1
+                    if finish_count == thread_count:
+                        break
+                else:
+                    yield item
+        finally:
+            logging.log(logging.WARN, "Interrupt threads")
+            interruptevent.set()
+
+
+
 
     def delete_request(self, request_id):
         # delete the request entry
@@ -379,7 +418,6 @@ class SequentialCrawlDB(CrawlDB):
             cur_request_id = self.initial_request_id
         if max_request_id is None:
             max_request_id = self.max_request_id
-        print(cur_request_id, max_request_id)
 
         if max_request_id - cur_request_id < 10:
             for i in range(cur_request_id, max_request_id + 1):

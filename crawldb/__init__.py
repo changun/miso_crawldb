@@ -325,7 +325,7 @@ class CrawlDB:
                     break
             queue.put(None)
 
-        queue = Queue()
+        queue = Queue(1000)
         interruptevent = threading.Event()
         threads = []
         try:

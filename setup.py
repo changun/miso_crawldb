@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='crawldb',
-      version='0.5',
+      version='0.6',
       description='a dyanamo-based db to store crawler data',
       url='https://github.com/changun/miso_crawldb',
       author='Andy Hsieh',

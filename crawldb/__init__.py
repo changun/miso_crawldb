@@ -94,6 +94,16 @@ class CrawlDB:
             else:
                 raise e
 
+    def uncommit_request(self, request_id):
+
+        self.crawl_request_db.update_item(
+            Key={'crawler_name_and_request_id': self.get_request_id_key(request_id)},
+            UpdateExpression="set crawler_name_and_status=:status",
+            ConditionExpression="attribute_exists(requested_time)",
+            ExpressionAttributeValues={
+                ':status': self.get_request_status_key(CrawlStatus.REQUESTED)
+            })
+
     def commit_request(self, request_id, meta=None, skip_park=False, batch_writer=None):
         if meta is None:
             meta = {}

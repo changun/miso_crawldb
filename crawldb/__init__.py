@@ -243,9 +243,9 @@ class CrawlDB:
 
     def preprocess_item(self, item):
         # merge multi-part data
-        # covert item["data"] from Binary to bytes
 
-        data_buf = item["data"].value
+        # convert to mutable bytearray
+        data_buf = bytearray(item["data"].value)  # type: bytearray
         # process data with multiple parts
         if "part_id" in item:
             # get all the rest parts
@@ -257,8 +257,8 @@ class CrawlDB:
                     data_buf.extend(res["Item"]["data"].value)
                 else:
                     raise MissingDataPart(item["crawler_name_and_request_id"] + "," + item["data_id"])
-
-        item["data"] = data_buf
+        # convert back to bytes (immutable)
+        item["data"] = bytes(data_buf)
         item["request_id"] = self.parse_request_id_key(item["crawler_name_and_request_id"])
         item["key"] = {"crawler_name_and_request_id": item["crawler_name_and_request_id"], "data_id": item["data_id"]}
         return item

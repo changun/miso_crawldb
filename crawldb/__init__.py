@@ -278,20 +278,29 @@ class CrawlDB:
         return "Item" in response
 
     def scan_items(self, last_item=None, segment=0, total_segments=1):
-        if last_item is None:
-            res = self.crawl_data_db.scan(Select="ALL_ATTRIBUTES",
-                                          Segment=segment,
-                                          TotalSegments=total_segments,
-                                          FilterExpression=Key("crawler_name").eq(self.crawler_name))
-        else:
-            res = self.crawl_data_db.scan(
-                Select="ALL_ATTRIBUTES",
-                FilterExpression=Key("crawler_name").eq(self.crawler_name),
-                ExclusiveStartKey=last_item['key'],
-                Segment=segment,
-                TotalSegments=total_segments
-            )
-
+        import time
+        while True:
+            try:
+                if last_item is None:
+                    res = self.crawl_data_db.scan(Select="ALL_ATTRIBUTES",
+                                                  Segment=segment,
+                                                  TotalSegments=total_segments,
+                                                  FilterExpression=Key("crawler_name").eq(self.crawler_name))
+                else:
+                    res = self.crawl_data_db.scan(
+                        Select="ALL_ATTRIBUTES",
+                        FilterExpression=Key("crawler_name").eq(self.crawler_name),
+                        ExclusiveStartKey=last_item['key'],
+                        Segment=segment,
+                        TotalSegments=total_segments
+                    )
+                break
+            except ClientError as e:
+                if e.response['Error']['Code'] == "ProvisionedThroughputExceededException":
+                    time.sleep(2)
+                    continue
+                else:
+                    raise e
         for i in res["Items"]:
             if not i["crawler_name_and_request_id"].endswith("|ext"):
                 yield self.preprocess_item(i)
@@ -312,7 +321,6 @@ class CrawlDB:
                         yield self.preprocess_item(i)
             except ClientError as e:
                 if e.response['Error']['Code'] == "ProvisionedThroughputExceededException" and backoff_time <= 1024:
-                    import time
                     # exponential backoff when error
                     time.sleep(backoff_time)
                     backoff_time *= 2

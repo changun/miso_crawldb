@@ -260,7 +260,8 @@ class CrawlDB:
         # convert back to bytes (immutable)
         item["data"] = bytes(data_buf)
         item["request_id"] = self.parse_request_id_key(item["crawler_name_and_request_id"])
-        item["key"] = {"crawler_name_and_request_id": item["crawler_name_and_request_id"], "data_id": item["data_id"]}
+        item["key"] = {"crawler_name_and_request_id": item["crawler_name_and_request_id"],
+                       "data_id": item["data_id"]}
         return item
 
     def get_data(self, request_id, data_id):
@@ -303,7 +304,10 @@ class CrawlDB:
                     raise e
         for i in res["Items"]:
             if not i["crawler_name_and_request_id"].endswith("|ext"):
-                yield self.preprocess_item(i)
+                try:
+                    yield self.preprocess_item(i)
+                except Exception as e:
+                    logging.error(e, "Failed to preprocess item" + str(i))
 
         backoff_time = 1
         while 'LastEvaluatedKey' in res:
@@ -318,7 +322,11 @@ class CrawlDB:
                 )
                 for i in res["Items"]:
                     if not i["crawler_name_and_request_id"].endswith("|ext"):
-                        yield self.preprocess_item(i)
+                        try:
+                            yield self.preprocess_item(i)
+                        except Exception as e:
+                            logging.error(e, "Failed to preprocess item" + str(i))
+
             except ClientError as e:
                 if e.response['Error']['Code'] == "ProvisionedThroughputExceededException" and backoff_time <= 1024:
                     # exponential backoff when error

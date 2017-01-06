@@ -336,22 +336,28 @@ class CrawlDB:
                 else:
                     raise e
 
-    def parallel_scan_items(self, thread_count, map_fn=None):
+    def parallel_scan_items(self, thread_count, map_fn=None, queue_size=10000):
         import threading
         from queue import Queue
         worker_end = object()
-        def worker(thread_id, thread_count, queue, int_event, map_fn):
-            for item in self.scan_items(segment=thread_id, total_segments=thread_count):
-                if map_fn is None:
-                    queue.put(item)
-                else:
-                    queue.put(map_fn(item))
-                if int_event.is_set():
-                    logging.log(logging.WARN, "Thread %d Interrupted" % thread_id)
-                    break
-            queue.put(worker_end)
 
-        queue = Queue(1000)
+        def worker(thread_id, thread_count, queue, int_event, map_fn):
+            try:
+                for item in self.scan_items(segment=thread_id, total_segments=thread_count):
+                    try:
+                        if map_fn is None:
+                            queue.put(item)
+                        else:
+                            queue.put(map_fn(item))
+                        if int_event.is_set():
+                            logging.log(logging.WARN, "Thread %d Interrupted" % thread_id)
+                            break
+                    except Exception as e:
+                        queue.put(e)
+            finally:
+                queue.put(worker_end)
+
+        queue = Queue(queue_size)
         interruptevent = threading.Event()
         threads = []
         try:

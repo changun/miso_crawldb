@@ -328,7 +328,7 @@ class CrawlDB:
                             logging.error(e, "Failed to preprocess item" + str(i))
 
             except ClientError as e:
-                if e.response['Error']['Code'] == "ProvisionedThroughputExceededException" and backoff_time <= 1024:
+                if e.response['Error']['Code'] == "ProvisionedThroughputExceededException" and backoff_time <= 10240:
                     # exponential backoff when error
                     time.sleep(backoff_time)
                     backoff_time *= 2
@@ -339,7 +339,7 @@ class CrawlDB:
     def parallel_scan_items(self, thread_count, map_fn=None):
         import threading
         from queue import Queue
-
+        worker_end = object()
         def worker(thread_id, thread_count, queue, int_event, map_fn):
             for item in self.scan_items(segment=thread_id, total_segments=thread_count):
                 if map_fn is None:
@@ -349,7 +349,7 @@ class CrawlDB:
                 if int_event.is_set():
                     logging.log(logging.WARN, "Thread %d Interrupted" % thread_id)
                     break
-            queue.put(None)
+            queue.put(worker_end)
 
         queue = Queue(1000)
         interruptevent = threading.Event()
@@ -357,13 +357,13 @@ class CrawlDB:
         try:
             for i in range(thread_count):
                 t = threading.Thread(target=worker, args=(i, thread_count, queue, interruptevent, map_fn))
-                t.daemon = True
+                #t.daemon = True
                 t.start()
                 threads.append(t)
             finish_count = 0
             while True:
                 item = queue.get()
-                if item is None:
+                if item is worker_end:
                     finish_count += 1
                     if finish_count == thread_count:
                         break

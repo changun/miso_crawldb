@@ -27,6 +27,7 @@ class MissingDataPart(Exception):
 
 class CrawlDB:
     def __init__(self, crawler_name, request_timeout):
+        self.__version__ = "0.6.4"
         self.crawler_name = crawler_name
         self.request_timeout = request_timeout
         self.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
@@ -307,7 +308,7 @@ class CrawlDB:
                 try:
                     yield self.preprocess_item(i)
                 except Exception as e:
-                    logging.error(e, "Failed to preprocess item" + str(i))
+                    logging.error(e, "Failed to preprocess item " + str(i))
 
         backoff_time = 1
         while 'LastEvaluatedKey' in res:
@@ -325,7 +326,7 @@ class CrawlDB:
                         try:
                             yield self.preprocess_item(i)
                         except Exception as e:
-                            logging.error(e, "Failed to preprocess item" + str(i))
+                            logging.error(e, "Failed to preprocess item " + str(i))
 
             except ClientError as e:
                 if e.response['Error']['Code'] == "ProvisionedThroughputExceededException" and backoff_time <= 10240:
@@ -353,6 +354,7 @@ class CrawlDB:
                             logging.log(logging.WARN, "Thread %d Interrupted" % thread_id)
                             break
                     except Exception as e:
+                        logging.error(e)
                         queue.put(e)
             finally:
                 queue.put(worker_end)

@@ -9,8 +9,11 @@ setup(name='crawldb',
       license='MIT',
       packages=['crawldb'],
       install_requires=[
-          'boto3',
-          'mongomock', 'typing', 'pymongo',
-          'enum34', 'moto'
+         'boto3',
+         'typing',
+         'pymongo',
+         'enum34',
+
       ],
+       # these two libraries are required for testing 'moto', 'mongomock'
       zip_safe=False)

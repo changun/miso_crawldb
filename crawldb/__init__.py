@@ -108,10 +108,6 @@ ERROR = 2
 
 
 class CrawlDB:
-
-
-
-
     # s3 stuff
     s3 = boto3.client('s3')
     S3_BUCKET_NAME = "miso-crawler"
@@ -122,7 +118,7 @@ class CrawlDB:
 
     def __init__(self, crawler_name: str, request_timeout: timedelta = timedelta(minutes=10),
                  mongo_db=None):
-        self.__version__ = "0.7.3"
+        self.__version__ = "0.7.4"
         if mongo_db is None:
             self.status_coll = MongoClient("mongo").crawldb.status
             self.s3_key_cache = MongoClient("mongo").crawldb.s3_key_cache
@@ -263,7 +259,15 @@ class CrawlDB:
         else:
             return None
 
-    def save_data(self, request_id, data_id: Any, data: bytes, version: int = 0):
+    def save_data(self, request_id, data_id: Any, data, version: int = 0):
+        """
+
+        :param request_id: request id (number, datetime, or string)
+        :param data_id: data id, anything that can be json seerialized
+        :param data: bytes or file like object
+        :param version: int (default 0)
+        :return:
+        """
         file_key = self._get_data_key(request_id, data_id, version)
         self.s3.put_object(Bucket=self.S3_BUCKET_NAME, Body=data, Key=file_key)
         self.s3_key_cache.replace_one({"_id": file_key}, {}, True)

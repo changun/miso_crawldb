@@ -121,7 +121,7 @@ class CrawlDB:
 
     def __init__(self, crawler_name: str, request_timeout: timedelta = timedelta(minutes=10),
                  mongo_db=None):
-        self.__version__ = "0.7.1"
+        self.__version__ = "0.7.2"
         if mongo_db is None:
             self.status_coll = MongoClient("mongo").crawldb.status
             self.s3_key_cache = MongoClient("mongo").crawldb.s3_key_cache
@@ -164,12 +164,12 @@ class CrawlDB:
                              ]))
 
     def _parse_data_key(self, key: str) -> Tuple[Any, Any, int]:
-        crawler_name, request_id_str, data_id_str, version_str = map(urllib.parse.unquote, key.split("/"))
+        crawler_name, request_id_str, data_id_str, version_str = map(urllib.parse.unquote_plus, key.split("/"))
         assert crawler_name == self.crawler_name
         request_id = deserialize_request_id(request_id_str)
         data_id = deserialize_data_id(data_id_str)
         version = int(version_str)
-        assert key == self._get_data_key(request_id, data_id, version)
+        assert key == self._get_data_key(request_id, data_id, version), "%s != %s" % (key, self._get_data_key(request_id, data_id, version))
         return request_id, data_id, version
 
     def _get_data_key_prefix(self, request_id):

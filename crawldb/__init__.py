@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Iterable, Tuple, Optional
 import boto3
+import pymongo
 from pymongo import MongoClient
 import multiprocessing
 
@@ -121,7 +122,7 @@ class CrawlDB:
 
     def __init__(self, crawler_name: str, request_timeout: timedelta = timedelta(minutes=10),
                  mongo_db=None):
-        self.__version__ = "0.7.2"
+        self.__version__ = "0.7.3"
         if mongo_db is None:
             self.status_coll = MongoClient("mongo").crawldb.status
             self.s3_key_cache = MongoClient("mongo").crawldb.s3_key_cache
@@ -130,7 +131,9 @@ class CrawlDB:
             self.s3_key_cache = mongo_db.crawldb.s3_key_cache
 
         # make sure the required index is available
-        self.status_coll.create_index(["crawler", "status", "requested_time"])
+        self.status_coll.create_index([("crawler", pymongo.ASCENDING),
+                                       ("status", pymongo.ASCENDING),
+                                       ("requested_time", pymongo.ASCENDING)])
         self.crawler_name = crawler_name
 
         assert isinstance(request_timeout, timedelta)

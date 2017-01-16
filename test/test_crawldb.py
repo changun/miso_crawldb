@@ -60,6 +60,11 @@ class Test(unittest.TestCase):
         self.assertEqual(set([item["data"] for item in crawldb.parallel_scan_items()]), data_set)
         self.assertEqual(crawldb.get_data_ids(1), {0, 1, 2})
 
+        # check parsing/serializing data id
+        data_id_with_symbol = "2011-02-17-0+00 00.json.gz/32r422//&&@#$@@!~"
+        crawldb.save_data(datetime(2012, 1, 2), data_id_with_symbol, b"test")
+        self.assertEqual(set(crawldb.get_data_ids(datetime(2012, 1, 2))),  {data_id_with_symbol})
+
     def test_metadata(self):
         db = mongomock.MongoClient().db
         crawldb = SequentialCrawlDB("test", timedelta(seconds=10), 0, 20, mongo_db=db)

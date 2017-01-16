@@ -121,7 +121,7 @@ class CrawlDB:
 
     def __init__(self, crawler_name: str, request_timeout: timedelta = timedelta(minutes=10),
                  mongo_db=None):
-        self.__version__ = "0.7.0"
+        self.__version__ = "0.7.1"
         if mongo_db is None:
             self.status_coll = MongoClient("mongo").crawldb.status
             self.s3_key_cache = MongoClient("mongo").crawldb.s3_key_cache
@@ -130,7 +130,7 @@ class CrawlDB:
             self.s3_key_cache = mongo_db.crawldb.s3_key_cache
 
         # make sure the required index is available
-        self.status_coll.create_index(OrderedDict([("crawler", 1), ("status", 1), ("requested_time", 1)]))
+        self.status_coll.create_index(["crawler", "status", "requested_time"])
         self.crawler_name = crawler_name
 
         assert isinstance(request_timeout, timedelta)

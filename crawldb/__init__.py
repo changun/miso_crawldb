@@ -352,11 +352,11 @@ class SequentialCrawlDB(CrawlDB):
 
         # do divide and counter
         middle = int(start_request_id + ((end_request_id - start_request_id) / 2))
-        ret = self._divide_and_conquer_search(start_request_id, middle)
+        ret = self._divide_and_conquer_search(middle, end_request_id)
         if ret is not None:
             return ret
         else:
-            ret = self._divide_and_conquer_search(middle, end_request_id)
+            ret = self._divide_and_conquer_search(start_request_id, middle)
             return ret
 
     def next_request_id(self):

@@ -282,6 +282,12 @@ class CrawlDB:
     def data_exists(self, request_id, data_id, version=0):
         return self.s3_key_cache.find_one(self._get_data_key(request_id, data_id, version)) is not None
 
+    def list_data(self) -> Iterable[Tuple]:
+        """
+        :return: A iterable of tuples of (request_id, data_id, version)
+        """
+        return map(self._parse_data_key, mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/"))
+
     def parallel_scan_items(self, thread_count=None, map_fn=None, executor=None) -> Iterable[Any]:
         def worker(raw_file_key):
             request_id, data_id, version = self._parse_data_key(raw_file_key)

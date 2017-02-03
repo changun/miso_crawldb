@@ -232,7 +232,10 @@ class CrawlDB:
         :param request_id: request id
         :return: the metadata attached to the request when it was committed
         """
-        return self.status_coll.find_one(self.get_request_id_key(request_id))["metadata"]
+        record = self.status_coll.find_one(self.get_request_id_key(request_id))
+        if record is not None:
+            return record.get("metadata")
+
 
     def get_data_ids(self, request_id):
         """

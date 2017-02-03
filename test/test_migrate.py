@@ -28,3 +28,9 @@ class Test(unittest.TestCase):
             crawldb.commit_request(r_id, skip_park=True)
         for i in range(100):
             self.assertEquals(crawldb.is_crawled_or_being_crawled(i), True)
+def migrate():
+    import datetime
+    for site in ("acm", "ieee_with_references", "epo"):
+        db = SequentialCrawlDB(site, datetime.timedelta(minutes=10), 837505, 2972950)
+        for r_id, _, _ in tqdm.tqdm(db.list_data()):
+            db.commit_request(r_id, skip_park=True)

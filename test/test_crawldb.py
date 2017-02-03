@@ -71,6 +71,8 @@ class Test(unittest.TestCase):
         # should raise
         crawldb.commit_request(1, {"test": "test"}, skip_park=True)
         self.assertEqual(crawldb.get_request_meta(1), {"test": "test"})
+        # return none if not requested
+        self.assertEqual(crawldb.get_request_meta(10), None)
 
     def test_timeout(self):
         db = mongomock.MongoClient().db
@@ -86,6 +88,7 @@ class Test(unittest.TestCase):
         import time
         time.sleep(0.1)
         self.assertEqual(None, crawldb.get_timeout_request_id())
+
 
     def test_datetime(self):
         db = mongomock.MongoClient().db

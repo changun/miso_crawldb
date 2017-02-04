@@ -1,4 +1,5 @@
 import unittest
+from concurrent.futures import ProcessPoolExecutor
 from datetime import timedelta, datetime
 from moto import mock_s3
 import boto3
@@ -57,7 +58,14 @@ class Test(unittest.TestCase):
         data_set = {b"test is a test 1", b"test is a test 2", b"test is a test 3"}
         for d, index in zip(data_set, range(len(data_set))):
             crawldb.save_data(1, index, d)
+
+
         self.assertEqual(set([item["data"] for item in crawldb.parallel_scan_items()]), data_set)
+
+        self.assertEqual(set([item["data"] for item in crawldb.parallel_scan_items(map_fn=lambda a:a,
+                                                                                   executor=ProcessPoolExecutor(10))]), data_set)
+
+
         self.assertEqual(crawldb.get_data_ids(1), {0, 1, 2})
 
         # check parsing/serializing data id

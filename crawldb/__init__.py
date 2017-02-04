@@ -101,6 +101,19 @@ def mongo_list_by_prefix(coll, prefix) -> Iterable[str]:
     for record in coll.find({"_id": {'$regex': '^' + re.escape(prefix)}}, {"_id": 1}):
         yield record["_id"]
 
+_map_fn = None
+_db = None
+def worker(raw_file_key):
+    request_id, data_id, version = _db._parse_data_key(raw_file_key)
+    body = _db.get_data(request_id, data_id, version)["Body"]
+    my_ret = {"request_id": request_id,
+              "data_id": data_id,
+              "version": version,
+              "data": body.read()}
+
+    if _map_fn is not None:
+        my_ret = _map_fn(my_ret)
+    return my_ret
 
 CRAWLED = 0
 REQUESTED = 1
@@ -291,26 +304,17 @@ class CrawlDB:
         """
         return map(self._parse_data_key, mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/"))
 
-    def parallel_scan_items(self, thread_count=None, map_fn=None, executor=None, filter_fn=None) -> Iterable[Any]:
-        def worker(raw_file_key):
-            request_id, data_id, version = self._parse_data_key(raw_file_key)
-            if filter_fn is None or filter_fn(request_id, data_id, version):
-                body = self.get_data(request_id, data_id, version)["Body"]
-                my_ret = {"request_id": request_id,
-                          "data_id": data_id,
-                          "version": version,
-                          "data": body.read()}
+    def parallel_scan_items(self, thread_count=None, map_fn=None, executor=None, chunksize=10000) -> Iterable[Any]:
 
-                if map_fn is not None:
-                    my_ret = map_fn(my_ret)
-                return my_ret
-
+        global _map_fn, _db
+        _map_fn = map_fn
+        _db = self
         if executor is None:
             if thread_count is None:
                 thread_count = multiprocessing.cpu_count()
             executor = ThreadPoolExecutor(max_workers=thread_count)
         try:
-            for ret in executor.map(worker, mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/")):
+            for ret in executor.map(worker, mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/"), chunksize=chunksize):
                 yield ret
         finally:
             executor.shutdown()

@@ -291,22 +291,22 @@ class CrawlDB:
         """
         return map(self._parse_data_key, mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/"))
 
-    def parallel_scan_items(self, thread_count=None, map_fn=None, executor=None) -> Iterable[Any]:
+    def parallel_scan_items(self, thread_count=None, map_fn=None, executor=None, filter_fn=None) -> Iterable[Any]:
         def worker(raw_file_key):
             request_id, data_id, version = self._parse_data_key(raw_file_key)
-            body = self.get_data(request_id, data_id, version)["Body"]
-            my_ret = {"request_id": request_id,
-                      "data_id": data_id,
-                      "version": version,
-                      "data": body.read()}
+            if filter_fn is None or filter_fn(request_id, data_id, version):
+                body = self.get_data(request_id, data_id, version)["Body"]
+                my_ret = {"request_id": request_id,
+                          "data_id": data_id,
+                          "version": version,
+                          "data": body.read()}
 
-            if map_fn is not None:
-                my_ret = map_fn(my_ret)
-            return my_ret
+                if map_fn is not None:
+                    my_ret = map_fn(my_ret)
+                return my_ret
 
         if executor is None:
             if thread_count is None:
-
                 thread_count = multiprocessing.cpu_count()
             executor = ThreadPoolExecutor(max_workers=thread_count)
         try:

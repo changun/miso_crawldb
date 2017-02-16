@@ -305,7 +305,7 @@ class CrawlDB:
         """
         return map(self._parse_data_key, mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/"))
 
-    def parallel_scan_items(self, thread_count=None, map_fn=None, executor=None, chunksize=10000) -> Iterable[Any]:
+    def parallel_scan_items(self, thread_count=None, map_fn=None, executor=None) -> Iterable[Any]:
 
         global _map_fn, _db
         _map_fn = map_fn
@@ -315,7 +315,7 @@ class CrawlDB:
                 thread_count = multiprocessing.cpu_count()
             executor = ThreadPoolExecutor(max_workers=thread_count)
         try:
-            for ret in executor.map(worker, mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/"), chunksize=chunksize):
+            for ret in executor.map(worker, mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/"),):
                 yield ret
         finally:
             executor.shutdown()

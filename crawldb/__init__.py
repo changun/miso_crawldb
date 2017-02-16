@@ -103,6 +103,7 @@ def mongo_list_by_prefix(coll, prefix) -> Iterable[str]:
 
 _map_fn = None
 _db = None
+
 def worker(raw_file_key):
     request_id, data_id, version = _db._parse_data_key(raw_file_key)
     body = _db.get_data(request_id, data_id, version)["Body"]
@@ -314,7 +315,7 @@ class CrawlDB:
                 thread_count = multiprocessing.cpu_count()
             executor = ThreadPoolExecutor(max_workers=thread_count)
         try:
-            for ret in executor.map(worker, mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/"),):
+            for ret in executor.map(worker, mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/"), chunksize=chunksize):
                 yield ret
         finally:
             executor.shutdown()

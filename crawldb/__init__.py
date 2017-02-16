@@ -13,6 +13,8 @@ from pymongo import MongoClient
 import multiprocessing
 
 # regex
+from tqdm import tqdm
+
 integer_request_id_regex = re.compile(r"\d{10}")
 date_regex = re.compile(r"\d\d\d\d-\d\d-\d\d( 00:00:00)?")
 
@@ -315,7 +317,8 @@ class CrawlDB:
                 thread_count = multiprocessing.cpu_count()
             executor = ThreadPoolExecutor(max_workers=thread_count)
         try:
-            for ret in executor.map(worker, mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/"),):
+
+            for ret in tqdm(executor.map(worker, mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/"),), desc="Scan progress"):
                 yield ret
         finally:
             executor.shutdown()

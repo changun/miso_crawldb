@@ -318,7 +318,7 @@ class CrawlDB:
             executor = ThreadPoolExecutor(max_workers=thread_count)
         try:
 
-            for ret in tqdm(executor.map(worker, mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/"),), desc="Scan progress"):
+            for ret in tqdm(executor.map(worker, list(mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/")),), desc="Scan progress"):
                 yield ret
         finally:
             executor.shutdown()

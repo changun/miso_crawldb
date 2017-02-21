@@ -10,11 +10,12 @@ from queue import Queue, Empty
 from typing import Any, Iterable, Tuple, Optional, List
 import boto3
 import pymongo
+import tqdm
 from pymongo import MongoClient
 import multiprocessing
 from concurrent.futures import ProcessPoolExecutor
 # regex
-from tqdm import tqdm
+
 
 integer_request_id_regex = re.compile(r"\d{10}")
 date_regex = re.compile(r"\d\d\d\d-\d\d-\d\d( 00:00:00)?")
@@ -325,16 +326,19 @@ class CrawlDB:
         else:
             executor = ProcessPoolExecutor(max_workers=thread_count)
         try:
-            requests = list(mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/"))
-
+            requests = reversed(list(mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/")))
+            progress_bar = tqdm.tqdm(total=len(requests), desc="Parallel scan " + self.crawler_name)
             for w in range(thread_count):
-                executor.submit(worker, [req for req, i in zip(requests, range(len(requests))) if i % thread_count == w], END_OBJECT)
+                executor.submit(worker,
+                                [req for req, i in zip(requests, range(len(requests))) if i % thread_count == w],
+                                END_OBJECT)
             end_count = 0
             while end_count < thread_count:
                 ret = _output_queue.get()
                 if ret == END_OBJECT:
                     end_count += 1
                 else:
+                    progress_bar.update()
                     yield ret
         finally:
             executor.shutdown()

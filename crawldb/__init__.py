@@ -1,8 +1,8 @@
 import json
 import logging
+import os
 import re
 import urllib.parse
-from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from enum import Enum
@@ -132,7 +132,7 @@ ERROR = 2
 class CrawlDB:
     # s3 stuff
     s3 = boto3.client('s3')
-    S3_BUCKET_NAME = "miso-crawler"
+    S3_BUCKET_NAME = os.environ.get("CRAWLER_S3_BUCKET", "askmiso-crawler")
 
     # suppress logging
     logging.getLogger('botocore').setLevel(logging.WARN)

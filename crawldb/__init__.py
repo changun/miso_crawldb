@@ -106,8 +106,8 @@ def mongo_list_by_prefix(coll, prefix) -> Iterable[str]:
 
 _map_fn = None
 _db = None
-
-def worker(requests: List, output_queue: Queue, END_OBJECT):
+_output_queue = Queue(10000)
+def worker(requests: List, END_OBJECT):
     try:
         for req in requests:
             request_id, data_id, version = _db._parse_data_key(req)
@@ -119,9 +119,9 @@ def worker(requests: List, output_queue: Queue, END_OBJECT):
 
             if _map_fn is not None:
                 my_ret = _map_fn(my_ret)
-            output_queue.put(my_ret)
+            _output_queue.put(my_ret)
     finally:
-        output_queue.put(END_OBJECT)
+        _output_queue.put(END_OBJECT)
 
 CRAWLED = 0
 REQUESTED = 1
@@ -313,7 +313,6 @@ class CrawlDB:
         return map(self._parse_data_key, mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/"))
 
     def parallel_scan_items(self, thread_count=None, map_fn=None, executor_type="thread") -> Iterable[Any]:
-        output_queue = Queue(10000)
         END_OBJECT = "END"
         global _map_fn, _db
         _map_fn = map_fn
@@ -327,11 +326,12 @@ class CrawlDB:
             executor = ProcessPoolExecutor(max_workers=thread_count)
         try:
             requests = list(mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/"))
+
             for w in range(thread_count):
-                executor.submit(worker, [req for req, i in zip(requests, range(len(requests))) if i % thread_count == w], output_queue, END_OBJECT)
+                executor.submit(worker, [req for req, i in zip(requests, range(len(requests))) if i % thread_count == w], END_OBJECT)
             end_count = 0
             while end_count < thread_count:
-                ret = output_queue.get()
+                ret = _output_queue.get()
                 if ret == END_OBJECT:
                     end_count += 1
                 else:

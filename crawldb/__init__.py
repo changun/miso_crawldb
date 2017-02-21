@@ -6,12 +6,13 @@ from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from enum import Enum
+from queue import Queue, Empty
 from typing import Any, Iterable, Tuple, Optional
 import boto3
 import pymongo
 from pymongo import MongoClient
 import multiprocessing
-
+from concurrent.futures import ProcessPoolExecutor
 # regex
 from tqdm import tqdm
 
@@ -106,17 +107,22 @@ def mongo_list_by_prefix(coll, prefix) -> Iterable[str]:
 _map_fn = None
 _db = None
 
-def worker(raw_file_key):
-    request_id, data_id, version = _db._parse_data_key(raw_file_key)
-    body = _db.get_data(request_id, data_id, version)["Body"]
-    my_ret = {"request_id": request_id,
-              "data_id": data_id,
-              "version": version,
-              "data": body.read()}
+def worker(request_queue: Queue, output_queue: Queue, END_OBJECT):
+    try:
+        while True:
+            req = request_queue.get(block=False)
+            request_id, data_id, version = _db._parse_data_key(req)
+            body = _db.get_data(request_id, data_id, version)["Body"]
+            my_ret = {"request_id": request_id,
+                      "data_id": data_id,
+                      "version": version,
+                      "data": body.read()}
 
-    if _map_fn is not None:
-        my_ret = _map_fn(my_ret)
-    return my_ret
+            if _map_fn is not None:
+                my_ret = _map_fn(my_ret)
+            output_queue.put(my_ret)
+    except Empty:
+        output_queue.put(END_OBJECT)
 
 CRAWLED = 0
 REQUESTED = 1
@@ -307,19 +313,32 @@ class CrawlDB:
         """
         return map(self._parse_data_key, mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/"))
 
-    def parallel_scan_items(self, thread_count=None, map_fn=None, executor=None) -> Iterable[Any]:
-
+    def parallel_scan_items(self, thread_count=None, map_fn=None, executor_type="thread") -> Iterable[Any]:
+        output_queue = Queue()
+        request_queue = Queue()
+        END_OBJECT = "END"
         global _map_fn, _db
         _map_fn = map_fn
         _db = self
-        if executor is None:
-            if thread_count is None:
-                thread_count = multiprocessing.cpu_count()
-            executor = ThreadPoolExecutor(max_workers=thread_count)
-        try:
 
-            for ret in tqdm(executor.map(worker, list(mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/")),), desc="Scan progress"):
-                yield ret
+        if thread_count is None:
+            thread_count = multiprocessing.cpu_count()
+        if executor_type == "thread":
+            executor = ThreadPoolExecutor(max_workers=thread_count)
+        else:
+            executor = ProcessPoolExecutor(max_workers=thread_count)
+        try:
+            for req in list(mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/")):
+                request_queue.put(req)
+            for w in range(thread_count):
+                executor.submit(worker, request_queue, output_queue, END_OBJECT)
+            end_count = 0
+            while end_count < thread_count:
+                ret = output_queue.get()
+                if ret == END_OBJECT:
+                    end_count += 1
+                else:
+                    yield ret
         finally:
             executor.shutdown()
 

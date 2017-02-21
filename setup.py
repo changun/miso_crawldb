@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='crawldb',
-      version='0.7.20',
+      version='0.7.21',
       description='a s3 and mongodb based database to store crawler data',
       url='https://github.com/changun/miso_crawldb',
       author='Andy Hsieh',
@@ -13,6 +13,7 @@ setup(name='crawldb',
          'typing',
          'pymongo',
          'enum34',
+          "tqdm",
 
       ],
        # these two libraries are required for testing 'moto', 'mongomock'

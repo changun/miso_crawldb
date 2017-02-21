@@ -314,7 +314,7 @@ class CrawlDB:
         return map(self._parse_data_key, mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/"))
 
     def parallel_scan_items(self, thread_count=None, map_fn=None, executor_type="thread") -> Iterable[Any]:
-        output_queue = Queue()
+        output_queue = Queue(10000)
         request_queue = Queue()
         END_OBJECT = "END"
         global _map_fn, _db

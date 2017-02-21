@@ -326,7 +326,7 @@ class CrawlDB:
         else:
             executor = ProcessPoolExecutor(max_workers=thread_count)
         try:
-            requests = reversed(list(mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/")))
+            requests = list(reversed(list(mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/"))))
             progress_bar = tqdm.tqdm(total=len(requests), desc="Parallel scan " + self.crawler_name)
             for w in range(thread_count):
                 executor.submit(worker,

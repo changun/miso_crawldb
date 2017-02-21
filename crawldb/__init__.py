@@ -328,7 +328,7 @@ class CrawlDB:
         try:
             requests = list(mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/"))
             for w in range(thread_count):
-                executor.submit(worker, [req for req, i in zip(requests, range(len(requests))) if i % w == 0], output_queue, END_OBJECT)
+                executor.submit(worker, [req for req, i in zip(requests, range(len(requests))) if i % thread_count == w], output_queue, END_OBJECT)
             end_count = 0
             while end_count < thread_count:
                 ret = output_queue.get()

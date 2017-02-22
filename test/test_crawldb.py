@@ -60,10 +60,9 @@ class Test(unittest.TestCase):
             crawldb.save_data(1, index, d)
 
 
-        self.assertEqual(set([item["data"] for item in crawldb.parallel_scan_items()]), data_set)
+        #self.assertEqual(set([item["data"] for item in crawldb.parallel_scan_items()]), data_set)
 
-        self.assertEqual(set([item["data"] for item in crawldb.parallel_scan_items(map_fn=lambda a:a,
-                                                                                   executor=ProcessPoolExecutor(10))]), data_set)
+        self.assertEqual(set([item["data"] for item in crawldb.parallel_scan_items(map_fn=lambda a:a, executor_type="process")]), data_set)
 
 
         self.assertEqual(crawldb.get_data_ids(1), {0, 1, 2})

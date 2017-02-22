@@ -107,22 +107,18 @@ def mongo_list_by_prefix(coll, prefix) -> Iterable[str]:
 
 _map_fn = None
 _db = None
-_output_queue = Queue(10000)
-def worker(requests: List, END_OBJECT):
-    try:
-        for req in requests:
-            request_id, data_id, version = _db._parse_data_key(req)
-            body = _db.get_data(request_id, data_id, version)["Body"]
-            my_ret = {"request_id": request_id,
-                      "data_id": data_id,
-                      "version": version,
-                      "data": body.read()}
+#_output_queue = Queue(10000)
+def worker(req):
+    request_id, data_id, version = _db._parse_data_key(req)
+    body = _db.get_data(request_id, data_id, version)["Body"]
+    my_ret = {"request_id": request_id,
+              "data_id": data_id,
+              "version": version,
+              "data": body.read()}
 
-            if _map_fn is not None:
-                my_ret = _map_fn(my_ret)
-            _output_queue.put(my_ret)
-    finally:
-        _output_queue.put(END_OBJECT)
+    if _map_fn is not None:
+        my_ret = _map_fn(my_ret)
+        return my_ret
 
 CRAWLED = 0
 REQUESTED = 1
@@ -313,8 +309,7 @@ class CrawlDB:
         """
         return map(self._parse_data_key, mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/"))
 
-    def parallel_scan_items(self, thread_count=None, map_fn=None, executor_type="thread") -> Iterable[Any]:
-        END_OBJECT = "END"
+    def parallel_scan_items(self, thread_count=None, map_fn=None, executor_type="thread", reverse=True) -> Iterable[Any]:
         global _map_fn, _db
         _map_fn = map_fn
         _db = self
@@ -326,20 +321,15 @@ class CrawlDB:
         else:
             executor = ProcessPoolExecutor(max_workers=thread_count)
         try:
-            requests = list(reversed(list(mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/"))))
+            requests = list(mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/"))
+            if reverse:
+                requests = list(reversed(requests))
             progress_bar = tqdm.tqdm(total=len(requests), desc="Parallel scan " + self.crawler_name)
-            for w in range(thread_count):
-                executor.submit(worker,
-                                [req for req, i in zip(requests, range(len(requests))) if i % thread_count == w],
-                                END_OBJECT)
-            end_count = 0
-            while end_count < thread_count:
-                ret = _output_queue.get()
-                if ret == END_OBJECT:
-                    end_count += 1
-                else:
-                    progress_bar.update()
-                    yield ret
+            for ret in executor.map(worker, requests):
+                yield ret
+                progress_bar.update()
+        except Exception:
+            logging.exception("Parallel scan exception")
         finally:
             executor.shutdown()
 

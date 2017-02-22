@@ -14,6 +14,7 @@ import tqdm
 from pymongo import MongoClient
 import multiprocessing
 from concurrent.futures import ProcessPoolExecutor
+from joblib import Parallel, delayed
 # regex
 
 
@@ -118,7 +119,7 @@ def worker(req):
 
     if _map_fn is not None:
         my_ret = _map_fn(my_ret)
-        return my_ret
+    return my_ret
 
 CRAWLED = 0
 REQUESTED = 1
@@ -316,22 +317,15 @@ class CrawlDB:
 
         if thread_count is None:
             thread_count = multiprocessing.cpu_count()
-        if executor_type == "thread":
-            executor = ThreadPoolExecutor(max_workers=thread_count)
-        else:
-            executor = ProcessPoolExecutor(max_workers=thread_count)
-        try:
-            requests = list(mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/"))
-            if reverse:
-                requests = list(reversed(requests))
-            progress_bar = tqdm.tqdm(total=len(requests), desc="Parallel scan " + self.crawler_name)
-            for ret in executor.map(worker, requests):
-                yield ret
-                progress_bar.update()
-        except Exception:
-            logging.exception("Parallel scan exception")
-        finally:
-            executor.shutdown()
+
+        requests = list(mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/"))
+        if reverse:
+            requests = list(reversed(requests))
+
+        with Parallel(n_jobs=thread_count) as parallel:
+            parallel(delayed(worker)(i) for i in requests)
+
+
 
     def delete_request(self, request_id):
         self.status_coll.remove({"_id": self.get_request_id_key(request_id)})

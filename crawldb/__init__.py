@@ -323,7 +323,8 @@ class CrawlDB:
             requests = list(reversed(requests))
 
         with Parallel(n_jobs=thread_count) as parallel:
-            parallel(delayed(worker)(i) for i in requests)
+            for ret in parallel(delayed(worker)(i) for i in requests):
+                yield ret
 
 
 

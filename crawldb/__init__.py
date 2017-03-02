@@ -1,20 +1,16 @@
 import json
 import logging
+import multiprocessing
 import os
 import re
 import urllib.parse
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from enum import Enum
-from queue import Queue, Empty
-from typing import Any, Iterable, Tuple, Optional, List
+from typing import Any, Iterable, Tuple, Optional
 import boto3
 import pymongo
-import tqdm
-from pymongo import MongoClient
-import multiprocessing
-from concurrent.futures import ProcessPoolExecutor
 from joblib import Parallel, delayed
+from pymongo import MongoClient
 
 # regex
 
@@ -129,6 +125,7 @@ def worker(req):
 CRAWLED = 0
 REQUESTED = 1
 ERROR = 2
+REDO = 3
 
 
 class CrawlDB:
@@ -219,15 +216,30 @@ class CrawlDB:
         :raises: ConcurrentParkingException if other crawlers tried to park the request at the same time
         """
         status_record = self.status_coll.find_one(self.get_request_id_key(request_id))
-        if status_record is None or (status_record["status"] == REQUESTED
-                                     and status_record["requested_time"] < self._timeout_threshold()):
-            self.status_coll.replace_one({"_id": self.get_request_id_key(request_id)},
-                                         {"crawler": self.crawler_name,
-                                          "request_id": serialize_request_id(request_id),
-                                          "requested_time": now_timestamp(),
-                                          "status": REQUESTED},
-                                         True
-                                         )
+        if status_record is None:
+            try:
+                self.status_coll.insert_one(
+                                             {"_id": self.get_request_id_key(request_id),
+                                             "crawler": self.crawler_name,
+                                              "request_id": serialize_request_id(request_id),
+                                              "requested_time": now_timestamp(),
+                                              "status": REQUESTED},
+                                             )
+            except pymongo.errors.DuplicateKeyError:
+                raise ConcurrentParkingException
+        elif status_record["status"] == REQUESTED and status_record["requested_time"] < self._timeout_threshold():
+            result = self.status_coll.replace_one({"_id": self.get_request_id_key(request_id),
+                                                   "requested_time": status_record["requested_time"]},
+                                                  {"crawler": self.crawler_name,
+                                                   "request_id": serialize_request_id(request_id),
+                                                   "requested_time": now_timestamp(),
+                                                   "status": REQUESTED},
+                                                  False
+                                                  )
+            if result.matched_count == 0:
+                raise ConcurrentParkingException
+            elif result.matched_count != 1:
+                raise RuntimeError("Something went terribly wrong!")
         else:
             raise ConcurrentParkingException
 
@@ -246,7 +258,7 @@ class CrawlDB:
                                           "request_id": serialize_request_id(request_id),
                                           "committed_time": now_timestamp(),
                                           "metadata": meta,
-                                          "status": REQUESTED},
+                                          "status": CRAWLED},
                                          True
                                          )
         else:
@@ -281,6 +293,9 @@ class CrawlDB:
         record = self.status_coll.find_one({"status": REQUESTED,
                                             "crawler": self.crawler_name,
                                             "requested_time": {"$lt": self._timeout_threshold()}})
+        if record is None:
+            record = self.status_coll.find_one({"status": REDO,
+                                                "crawler": self.crawler_name})
         if record is not None:
             return deserialize_request_id(record["request_id"])
         else:
@@ -340,16 +355,18 @@ class CrawlDB:
                                      {"crawler": self.crawler_name,
                                       "request_id": serialize_request_id(request_id),
                                       "requested_time": -1,
-                                      "status": REQUESTED},
+                                      "status": REDO},
                                      True
                                      )
 
     def delete_data(self, request_id, data_id, version=0):
         file_key = self._get_data_key(request_id, data_id, version)
-        self.s3.delete_object(Bucket=self.S3_BUCKET_NAME, Key=file_key)
-        self.s3_key_cache.remove({"_id": self._get_data_key(request_id, data_id, version)}) is not None
-        logging.warning("uncomnit request id %s along with data id %s", request_id, data_id)
         self.uncommit_request(request_id)
+        self.s3_key_cache.remove({"_id": self._get_data_key(request_id, data_id, version)})
+        self.s3.delete_object(Bucket=self.S3_BUCKET_NAME, Key=file_key)
+
+        logging.warning("delete data id %s and uncommit request id %s to force re-crawl", data_id, request_id)
+
 
 class SequentialCrawlDB(CrawlDB):
     def __init__(self, crawler_name, request_timeout, initial_request_id, max_request_id, mongo_db=None):

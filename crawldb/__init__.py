@@ -15,8 +15,8 @@ from pymongo import MongoClient
 # regex
 
 
-integer_request_id_regex = re.compile(r"\d{10}")
-date_regex = re.compile(r"\d\d\d\d-\d\d-\d\d( 00:00:00)?")
+integer_request_id_regex = re.compile(r"\d{10}$")
+date_regex = re.compile(r"\d\d\d\d-\d\d-\d\d( 00:00:00)?$")
 
 
 class CrawlStatus(Enum):

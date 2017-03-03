@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='crawldb',
-      version='0.7.27',
+      version='0.7.28',
       description='a s3 and mongodb based database to store crawler data',
       url='https://github.com/changun/miso_crawldb',
       author='Andy Hsieh',

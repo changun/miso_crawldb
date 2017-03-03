@@ -4,7 +4,7 @@ from datetime import timedelta, datetime
 from moto import mock_s3
 import boto3
 import mongomock
-from crawldb import SequentialCrawlDB, CommitBeforeParkingException, SequentialTimeCrawlDB
+from crawldb import SequentialCrawlDB, CommitBeforeParkingException, SequentialTimeCrawlDB, ConcurrentParkingException
 
 
 class Test(unittest.TestCase):
@@ -49,6 +49,16 @@ class Test(unittest.TestCase):
         crawldb.commit_request(request_id=10)
 
         crawldb.commit_request(request_id=11, skip_park=True)
+
+    def test_concurrent_parking(self):
+        db = mongomock.MongoClient().db
+        crawldb = SequentialCrawlDB("test", timedelta(seconds=60), 0, 20, mongo_db=db)
+
+        crawldb.park_request(request_id=21)
+        with self.assertRaises(ConcurrentParkingException):
+            crawldb.park_request(request_id=21)
+
+        crawldb.commit_request(request_id=21, skip_park=True)
 
     @mock_s3
     def test_save_data(self):
@@ -97,6 +107,8 @@ class Test(unittest.TestCase):
         import time
         time.sleep(0.1)
         self.assertEqual(1, crawldb.get_timeout_request_id())
+        # now try to park it
+        crawldb.park_request(1)
 
         db = mongomock.MongoClient().db
         crawldb = SequentialCrawlDB("test", timedelta(milliseconds=2000), 0, 20, mongo_db=db)

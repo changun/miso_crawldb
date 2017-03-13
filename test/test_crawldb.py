@@ -4,7 +4,8 @@ from datetime import timedelta, datetime
 from moto import mock_s3
 import boto3
 import mongomock
-from crawldb import SequentialCrawlDB, CommitBeforeParkingException, SequentialTimeCrawlDB, ConcurrentParkingException
+from crawldb import SequentialCrawlDB, CommitBeforeParkingException, SequentialTimeCrawlDB, ConcurrentParkingException, \
+    StringIDCrawlDB
 
 
 class Test(unittest.TestCase):
@@ -69,9 +70,13 @@ class Test(unittest.TestCase):
         for d, index in zip(data_set, range(len(data_set))):
             crawldb.save_data(1, index, d)
 
+        all_items = set()
+        def process_batch(data):
+            for record in data:
+                all_items.add(record["data"])
+        crawldb.parallel_scan_items(map_fn=process_batch, backend="threading")
+        self.assertEqual(all_items, data_set)
 
-        #self.assertEqual(set([item["data"] for item in crawldb.parallel_scan_items()]), data_set)
-        #self.assertEqual(crawldb.get_data_ids(1), {0, 1, 2})
 
         # check parsing/serializing data id
         data_id_with_symbol = "2011-02-17-0+00 00.json.gz/32r422//&&@#$@@!~"
@@ -124,3 +129,10 @@ class Test(unittest.TestCase):
         self.assertEqual(crawldb.next_request(), datetime(2000, 1, 1))
         crawldb.park_request(crawldb.next_request())
         self.assertEqual(crawldb.next_request(), datetime(2000, 1, 2))
+    def test_seriliaze(self):
+        db = mongomock.MongoClient().db
+        crawldb = StringIDCrawlDB("test", timedelta(milliseconds=10),
+                                        mongo_db=db)
+        with self.assertRaises(AssertionError):
+            crawldb.park_request("1020102021")
+        crawldb.park_request("1020102021a")

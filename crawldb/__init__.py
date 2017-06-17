@@ -23,11 +23,6 @@ integer_request_id_regex = re.compile(r"\d{10}$")
 date_regex = re.compile(r"\d\d\d\d-\d\d-\d\d( 00:00:00)?$")
 
 
-class CrawlStatus(Enum):
-    CRAWLED = 1
-    REQUESTED = 0
-
-
 class CommitBeforeParkingException(Exception):
     pass
 
@@ -137,7 +132,6 @@ def worker(chunk: Iterable[str]):
 
 CRAWLED = 0
 REQUESTED = 1
-ERROR = 2
 REDO = 3
 
 
@@ -240,7 +234,7 @@ class CrawlDB:
                                              )
             except pymongo.errors.DuplicateKeyError:
                 raise ConcurrentParkingException
-        elif status_record["status"] == REQUESTED and status_record["requested_time"] < self._timeout_threshold():
+        elif status_record["status"] in {REQUESTED, REDO} and status_record["requested_time"] < self._timeout_threshold():
             result = self.status_coll.replace_one({"_id": self.get_request_id_key(request_id),
                                                    "requested_time": status_record["requested_time"]},
                                                   {"crawler": self.crawler_name,

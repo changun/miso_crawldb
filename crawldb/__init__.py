@@ -125,7 +125,9 @@ def worker(i, queue: Queue):
                     try:
                         obj = _db.get_data(request_id, data_id, version)
                         body = obj["Body"]
-                        my_ret = {"request_id": request_id,
+                        my_ret = {
+                            "crawler_name": _db.crawler_name,
+                            "request_id": request_id,
                               "data_id": data_id,
                               "version": version,
                                "hash": obj["ETag"],

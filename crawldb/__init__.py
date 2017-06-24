@@ -129,7 +129,7 @@ def worker(i, queue: Queue):
                               "data_id": data_id,
                               "version": version,
                                "hash": obj["ETag"],
-                              "data": body.read()}
+                              "body": body}
                         yield my_ret
                         break
                     except ReadTimeoutError:

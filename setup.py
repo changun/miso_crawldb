@@ -15,7 +15,7 @@ setup(name='crawldb',
          'enum34',
           "tqdm",
           "joblib",
-          "geotext"
+
 
       ],
        # these two libraries are required for testing 'moto', 'mongomock'

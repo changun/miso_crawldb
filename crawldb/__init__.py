@@ -5,7 +5,8 @@ import os
 import re
 import urllib.parse
 from datetime import datetime, timedelta
-from enum import Enum
+from multiprocessing import Queue
+from queue import Empty
 from time import sleep
 from typing import Any, Iterable, Tuple, Optional
 from typing import Callable
@@ -13,7 +14,7 @@ from typing import Callable
 import boto3
 import pymongo
 from botocore.vendored.requests.packages.urllib3.exceptions import ReadTimeoutError
-from joblib import Parallel, delayed
+from multiprocessing import Process
 from pymongo import MongoClient
 
 # regex
@@ -107,24 +108,35 @@ _map_fn = None  # type: Callable[Iterable[dict]]
 _db = None
 
 
-def worker(chunk: Iterable[str]):
+def worker(i, queue: Queue):
     def generator():
-        for req in chunk:
-            request_id, data_id, version = _db._parse_data_key(req)
-            while True:
-                try:
-                    body = _db.get_data(request_id, data_id, version)["Body"]
-                    my_ret = {"request_id": request_id,
-                          "data_id": data_id,
-                          "version": version,
-                          "data": body.read()}
-                    yield my_ret
-                    break
-                except ReadTimeoutError:
-                    # FIXME: Sleep
-                    logging.exception("Read Timeout")
-                    sleep(1)
-                    pass
+        global _db
+        # get mongodb in the work process
+        _db.get_mongo_colletions()
+        while True:
+            # get a request chunk from the queue
+            try:
+                chunk = queue.get_nowait()
+            except Empty:
+                break
+            for req in chunk:
+                request_id, data_id, version = _db._parse_data_key(req)
+                while True:
+                    try:
+                        obj = _db.get_data(request_id, data_id, version)
+                        body = obj["Body"]
+                        my_ret = {"request_id": request_id,
+                              "data_id": data_id,
+                              "version": version,
+                               "hash": obj["ETag"],
+                              "data": body.read()}
+                        yield my_ret
+                        break
+                    except ReadTimeoutError:
+                        # FIXME: Sleep
+                        logging.exception("Read Timeout")
+                        sleep(1)
+                        pass
     # the _map_fn should be set by the parallel_scan() function
     global _map_fn
     _map_fn(generator())
@@ -144,16 +156,19 @@ class CrawlDB:
     logging.getLogger('botocore').setLevel(logging.WARN)
     logging.getLogger('boto3').setLevel(logging.WARN)
 
-    def __init__(self, crawler_name: str, request_timeout: timedelta = timedelta(minutes=10),
-                 mongo_db=None):
-        self.__version__ = "0.7.4"
-        if mongo_db is None:
+    def get_mongo_colletions(self):
+        if self.mongo_db is None:
             self.status_coll = MongoClient("mongo").crawldb.status
             self.s3_key_cache = MongoClient("mongo").crawldb.s3_key_cache
         else:
-            self.status_coll = mongo_db.crawldb.status
-            self.s3_key_cache = mongo_db.crawldb.s3_key_cache
+            self.status_coll = self.mongo_db.crawldb.status
+            self.s3_key_cache = self.mongo_db.crawldb.s3_key_cache
 
+    def __init__(self, crawler_name: str, request_timeout: timedelta = timedelta(minutes=10),
+                 mongo_db=None):
+        self.__version__ = "0.7.4"
+        self.mongo_db = mongo_db
+        self.get_mongo_colletions()
         # make sure the required index is available
         self.status_coll.create_index([("crawler", pymongo.ASCENDING),
                                        ("status", pymongo.ASCENDING),
@@ -337,7 +352,7 @@ class CrawlDB:
         """
         return map(self._parse_data_key, mongo_list_by_prefix(self.s3_key_cache, self.crawler_name + "/"))
 
-    def parallel_scan_items(self, map_fn, backend=None, thread_count=None, n_chunks=None, reverse=True) -> Iterable[Any]:
+    def parallel_scan_items(self, map_fn, thread_count=None, n_chunks=None, reverse=True, backend=Process) -> Iterable[Any]:
         global _map_fn, _db
         _map_fn = map_fn
         _db = self
@@ -354,11 +369,21 @@ class CrawlDB:
             """Yield successive n-sized chunks from l."""
             for i in range(0, len(l), n):
                 yield l[i:i + n]
+        queue = Queue()
+        for chunk in chunks(requests, int((len(requests) / n_chunks) + 1)):
+            queue.put(chunk)
+        processes = []
+        try:
+            for i in range(thread_count):
+                p = backend(target=worker, args=(i, queue))
+                processes.append(p)
+                p.start()
+        finally:
+            for p in processes:
+                p.join()
 
-        with Parallel(n_jobs=thread_count, backend=backend) as parallel:
-            chunk_size = int((len(requests) / n_chunks) + 1)
-            for ret in parallel(delayed(worker)(chunk) for chunk in chunks(requests, chunk_size)):
-                pass
+
+
 
     def delete_request(self, request_id):
         self.status_coll.remove({"_id": self.get_request_id_key(request_id)})

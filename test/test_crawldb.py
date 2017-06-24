@@ -1,6 +1,9 @@
 import unittest
 from concurrent.futures import ProcessPoolExecutor
 from datetime import timedelta, datetime
+from threading import Thread
+
+import logging
 from moto import mock_s3
 import boto3
 import mongomock
@@ -71,11 +74,18 @@ class Test(unittest.TestCase):
             crawldb.save_data(1, index, d)
 
         all_items = set()
-        def process_batch(data):
+
+        def process_batch_thread(data):
             for record in data:
                 all_items.add(record["data"])
-        crawldb.parallel_scan_items(map_fn=process_batch, backend="threading")
+        crawldb.parallel_scan_items(map_fn=process_batch_thread, backend=Thread)
         self.assertEqual(all_items, data_set)
+
+        def process_batch_process(data):
+            for record in data:
+                logging.warning(record)
+        crawldb.parallel_scan_items(map_fn=process_batch_process)
+
 
 
         # check parsing/serializing data id
